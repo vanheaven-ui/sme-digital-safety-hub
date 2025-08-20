@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import PasswordVault from "../components/PasswordVault";
 
 interface AnalysisResult {
   score: number;
@@ -54,7 +55,7 @@ export default function Home() {
         if (resultRef.current) {
           resultRef.current.scrollIntoView({
             behavior: "smooth",
-            block: "center", 
+            block: "center",
           });
         }
       }, 100);
@@ -67,7 +68,7 @@ export default function Home() {
       return {
         color: "text-red-600",
         bg: "bg-red-100",
-        emoji: "🚨",
+        emoji: "�",
       };
     } else if (score >= 40) {
       return {
@@ -132,7 +133,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-100">
-      <div className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg">
+      <div className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg mb-8">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
           SME Digital Safety Hub
         </h1>
@@ -198,6 +199,8 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      <PasswordVault />
     </div>
   );
 }

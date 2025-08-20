@@ -2,12 +2,16 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: [
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}", 
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}", 
-    "./src/app/globals.css", 
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/globals.css",
   ],
   theme: {
     extend: {
+      fontFamily: {
+        // Adding the new font family here
+        "plus-jakarta-sans": ["var(--font-plus-jakarta-sans)", "sans-serif"],
+      },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-conic":
