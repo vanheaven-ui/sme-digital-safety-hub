@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Best Practice: Use environment variables for sensitive data
-// We will set this in a .env.local file
 const apiKey = process.env.GEMINI_API_KEY;
 
 // Check if the API key is available
@@ -25,10 +24,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // Correctly define the model name in a constant variable
+    const MODEL_NAME = "gemini-1.5-flash";
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
 
     // This is the core of our AI logic: the prompt.
-    // The quality of the response depends on a good prompt.
     const prompt = `
       You are an expert cybersecurity analyst for a small business.
       Your task is to analyze the following text from an email or a message and determine if it is a phishing attempt or a scam.
@@ -47,16 +47,70 @@ export async function POST(req: NextRequest) {
       "${text}"
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const aiResponseText = response.text();
+    // --- Start of Retry and Caching Implementation ---
+    const maxRetries = 3;
+    let delay = 1000; // 1 second initial delay
+    let result = null;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey as string,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [{ text: prompt }],
+                },
+              ],
+            }),
+            next: { tags: ["gemini-analysis"] },
+          }
+        );
+
+        if (response.status === 429) {
+          console.log(`Rate limit exceeded. Retrying in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+          continue; // Go to the next loop iteration
+        }
+
+        if (!response.ok) {
+          const errorBody = await response.json();
+          throw new Error(`API error: ${JSON.stringify(errorBody)}`);
+        }
+
+        result = await response.json();
+        break; // Success! Exit the retry loop.
+      } catch (error) {
+        console.error(`Attempt ${i + 1} failed:`, error);
+        if (i < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (!result) {
+      throw new Error(
+        "Failed to get a response from the Gemini API after multiple retries."
+      );
+    }
+
+    // --- End of Retry and Caching Implementation ---
 
     // The AI response might contain the score and reasoning.
-    // We can parse it here to make it a structured JSON response.
+    const aiResponseText = result.candidates[0].content.parts[0].text;
     const scoreMatch = aiResponseText.match(/Suspicion Score: (\d+)/);
     const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
 
-    // We can also extract the reasoning here to make the data more structured.
     const reasoning = aiResponseText
       .replace(/Suspicion Score: \d+\n+Reasoning:\n+/, "")
       .trim();
