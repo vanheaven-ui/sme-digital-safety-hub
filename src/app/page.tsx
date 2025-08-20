@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 // Define the expected API response type
 interface AnalysisResult {
   score: number;
   reasoning: string;
+  // fullResponse is also returned but not used in the UI
 }
 
 export default function Home() {
@@ -15,6 +16,9 @@ export default function Home() {
     null
   );
   const [error, setError] = useState<string | null>(null);
+
+  // Create a ref for the result section
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +52,42 @@ export default function Home() {
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
+      // Scroll to the result section after the result is set
+      if (resultRef.current) {
+        resultRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
     }
   };
+
+  // Helper function to determine the color and emoji based on the score
+  const getScoreStyle = (score: number) => {
+    if (score >= 80) {
+      return {
+        color: "text-red-600",
+        bg: "bg-red-100",
+        emoji: "🚨",
+      };
+    } else if (score >= 40) {
+      return {
+        color: "text-yellow-600",
+        bg: "bg-yellow-100",
+        emoji: "⚠️",
+      };
+    } else {
+      return {
+        color: "text-green-600",
+        bg: "bg-green-100",
+        emoji: "✅",
+      };
+    }
+  };
+
+  const scoreStyle = analysisResult
+    ? getScoreStyle(analysisResult.score)
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-100">
@@ -85,11 +123,28 @@ export default function Home() {
         )}
 
         {analysisResult && (
-          <div className="mt-6 p-6 bg-gray-50 rounded-md border border-gray-200">
-            <h2 className="text-2xl font-semibold mb-3">Analysis Result</h2>
+          <div
+            // Attach the ref here
+            ref={resultRef}
+            className={`mt-6 p-6 rounded-md border ${
+              scoreStyle ? scoreStyle.bg : "bg-gray-50"
+            } ${
+              scoreStyle
+                ? "border-" + scoreStyle.bg.split("-")[1] + "-400"
+                : "border-gray-200"
+            }`}
+          >
+            <h2 className="text-2xl font-semibold mb-3 flex items-center">
+              Analysis Result
+              <span className="ml-2">{scoreStyle?.emoji}</span>
+            </h2>
             <p className="text-gray-700 mb-2">
               <strong>Suspicion Score:</strong>{" "}
-              <span className="font-bold">{analysisResult.score}/100</span>
+              <span
+                className={`font-bold ${scoreStyle ? scoreStyle.color : ""}`}
+              >
+                {analysisResult.score}/100
+              </span>
             </p>
             <p className="text-gray-700">
               <strong>Reasoning:</strong>
