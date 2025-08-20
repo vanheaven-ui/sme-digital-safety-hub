@@ -2,11 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 
-// Define the expected API response type
 interface AnalysisResult {
   score: number;
   reasoning: string;
-  // fullResponse is also returned but not used in the UI
 }
 
 export default function Home() {
@@ -52,13 +50,14 @@ export default function Home() {
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
-      // Scroll to the result section after the result is set
-      if (resultRef.current) {
-        resultRef.current.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }
+      setTimeout(() => {
+        if (resultRef.current) {
+          resultRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center", 
+          });
+        }
+      }, 100);
     }
   };
 
@@ -83,6 +82,48 @@ export default function Home() {
         emoji: "✅",
       };
     }
+  };
+
+  const formatReasoning = (text: string) => {
+    let formattedText = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    formattedText = formattedText.replace(/__(.*?)__/g, "<strong>$1</strong>");
+
+    formattedText = formattedText.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    formattedText = formattedText.replace(/_(.*?)_/g, "<em>$1</em>");
+
+    const lines = formattedText.split("\n");
+    let html = "";
+    let inList = false;
+
+    lines.forEach((line) => {
+      const trimmedLine = line.trim();
+      const isListItem =
+        trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ");
+
+      if (isListItem) {
+        if (!inList) {
+          html += "<ul>";
+          inList = true;
+        }
+
+        const listItemText = trimmedLine.substring(2);
+        html += `<li>${listItemText}</li>`;
+      } else {
+        if (inList) {
+          html += "</ul>";
+          inList = false;
+        }
+        if (trimmedLine) {
+          html += `<p>${trimmedLine}</p>`;
+        }
+      }
+    });
+
+    if (inList) {
+      html += "</ul>";
+    }
+
+    return html;
   };
 
   const scoreStyle = analysisResult
@@ -124,7 +165,6 @@ export default function Home() {
 
         {analysisResult && (
           <div
-            // Attach the ref here
             ref={resultRef}
             className={`mt-6 p-6 rounded-md border ${
               scoreStyle ? scoreStyle.bg : "bg-gray-50"
@@ -152,7 +192,7 @@ export default function Home() {
             <div
               className="prose text-gray-600 mt-2"
               dangerouslySetInnerHTML={{
-                __html: analysisResult.reasoning.replace(/\n/g, "<br/>"),
+                __html: formatReasoning(analysisResult.reasoning),
               }}
             />
           </div>
