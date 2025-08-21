@@ -1,3 +1,4 @@
+// hooks/usePasswordVault.ts
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,173 +15,261 @@ import {
 import {
   getFirestore,
   Firestore,
-  collection,
-  addDoc,
-  deleteDoc,
   doc,
-  query,
+  collection,
+  setDoc,
+  deleteDoc,
   onSnapshot,
   DocumentData,
-  QueryDocumentSnapshot,
+  CollectionReference,
+  DocumentReference,
 } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+// Helper function to generate a random 32-byte key
+const generateKey = (): string => {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...Array.from(arr)));
 };
+
+// Map Firebase auth error codes to user-friendly messages
+const getFriendlyErrorMessage = (errorCode: string): string => {
+  switch (errorCode) {
+    case "auth/invalid-email":
+      return "The email address is not valid.";
+    case "auth/user-disabled":
+      return "This account has been disabled.";
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "Invalid email or password.";
+    case "auth/email-already-in-use":
+      return "The email address is already in use by another account.";
+    case "auth/weak-password":
+      return "The password is too weak. Please choose a stronger one.";
+    default:
+      return "An unknown error occurred. Please try again.";
+  }
+};
+
+// Define Firebase configuration based on environment variables
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+};
+
+// Initialize Firebase App outside the hook to avoid re-initialization on every render
+const app: FirebaseApp = initializeApp(firebaseConfig);
+const auth: Auth = getAuth(app);
+const db: Firestore = getFirestore(app);
 
 export interface PasswordEntry {
   id: string;
   name: string;
   encryptedPassword: string;
-  hashedPassword: string;
+  createdAt: any;
 }
 
-export function usePasswordVault() {
-  const [auth, setAuth] = useState<Auth | null>(null);
-  const [db, setDb] = useState<Firestore | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+interface UsePasswordVaultReturn {
+  entries: PasswordEntry[];
+  loading: boolean;
+  error: string | null;
+  isLoggedIn: boolean;
+  isAuthReady: boolean;
+  userId: string | null;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signOutUser: () => Promise<void>;
+  savePassword: (name: string, password: string) => Promise<void>;
+  deletePassword: (id: string) => Promise<void>;
+}
 
+export const usePasswordVault = (): UsePasswordVaultReturn => {
   const [entries, setEntries] = useState<PasswordEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userSecretKey, setUserSecretKey] = useState<string | null>(null);
 
+  // Use a ref for the encryption key to persist across re-renders
+  // This is a simple mock, a real application would use a secure server-side method
+  // to handle encryption and decryption.
+  const encryptionKey = "my-secret-key-for-now";
+
+  // Authenticate user with Firebase
   useEffect(() => {
-    const app: FirebaseApp = initializeApp(firebaseConfig);
-    setDb(getFirestore(app));
-    const firebaseAuth: Auth = getAuth(app);
-    setAuth(firebaseAuth);
-
-    const unsubscribe = onAuthStateChanged(
-      firebaseAuth,
-      (user: User | null) => {
-        if (user) {
-          setUserId(user.uid);
-          setIsLoggedIn(true);
-        } else {
-          setUserId(null);
-          setIsLoggedIn(false);
-        }
-        setIsAuthReady(true);
+    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+      if (user) {
+        setIsLoggedIn(true);
+        setUserId(user.uid);
+        setUserSecretKey(user.uid);
+      } else {
+        setIsLoggedIn(false);
+        setUserId(null);
+        setUserSecretKey(null);
+        setEntries([]);
       }
-    );
+      setIsAuthReady(true);
+      setLoading(false);
+    });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
-  // Listen for password entries
+  // Fetch passwords from Firestore
   useEffect(() => {
-    if (!db || !userId) return;
+    if (!isLoggedIn || !userId) return;
 
-    const passwordsCollection = collection(db, `users/${userId}/passwords`);
-    const q = query(passwordsCollection);
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedEntries: PasswordEntry[] = [];
-        snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-          const data = doc.data() as {
-            name?: string;
-            encryptedPassword?: string;
-            hashedPassword?: string;
-          };
-          fetchedEntries.push({
-            id: doc.id,
-            name: data.name || "",
-            encryptedPassword: data.encryptedPassword || "",
-            hashedPassword: data.hashedPassword || "",
-          });
-        });
-        setEntries(fetchedEntries);
-      },
-      (err: unknown) => {
-        console.error(err);
-        setError("Failed to load passwords.");
-      }
-    );
-
-    return () => unsubscribe();
-  }, [db, userId]);
-
-  // Auth actions
-  const signIn = async (email: string, password: string) => {
     setLoading(true);
-    setError(null);
+    const userVaultRef: CollectionReference<DocumentData> = collection(
+      db,
+      "vaults",
+      userId,
+      "passwords"
+    );
+    const unsubscribe = onSnapshot(userVaultRef, (snapshot) => {
+      const vaultEntries: PasswordEntry[] = snapshot.docs.map((doc) => {
+        const data = doc.data() as Omit<PasswordEntry, "id">;
+        return {
+          id: doc.id,
+          name: data.name,
+          encryptedPassword: data.encryptedPassword,
+          createdAt:
+            data.createdAt instanceof Date
+              ? data.createdAt
+              : new Date(data.createdAt),
+        };
+      });
+      setEntries(vaultEntries);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [isLoggedIn, userId]);
+
+  // Encryption function mock
+  const encryptPassword = async (
+    password: string,
+    secretKey: string
+  ): Promise<string> => {
+    return btoa(password + secretKey);
+  };
+
+  // Decryption function mock
+  const decryptPassword = async (
+    encryptedText: string,
+    secretKey: string
+  ): Promise<string> => {
+    const decoded = atob(encryptedText);
+    return decoded.replace(secretKey, "");
+  };
+
+  // Handle user sign-in
+  const signIn = async (email: string, password: string): Promise<void> => {
+    setLoading(true);
     try {
-      if (!auth) throw new Error("Auth not initialized");
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: unknown) {
-      if (err instanceof Error) setError(err.message);
-      else setError("Sign in failed");
-      console.error(err);
+      setError(null);
+    } catch (e: any) {
+      const errorCode = e.code;
+      const friendlyMessage = getFriendlyErrorMessage(errorCode);
+      setError(friendlyMessage);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  // Handle user sign-up
+  const signUp = async (email: string, password: string): Promise<void> => {
     setLoading(true);
-    setError(null);
     try {
-      if (!auth) throw new Error("Auth not initialized");
       await createUserWithEmailAndPassword(auth, email, password);
-    } catch (err: unknown) {
-      if (err instanceof Error) setError(err.message);
-      else setError("Sign up failed");
-      console.error(err);
+      setError(null);
+    } catch (e: any) {
+      const errorCode = e.code;
+      const friendlyMessage = getFriendlyErrorMessage(errorCode);
+      setError(friendlyMessage);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const signOutUser = async () => {
-    if (auth) {
+  // Handle user sign-out
+  const signOutUser = async (): Promise<void> => {
+    setLoading(true);
+    try {
       await signOut(auth);
-      setEntries([]);
+      setError(null);
+    } catch (e: any) {
+      const errorCode = e.code;
+      const friendlyMessage = getFriendlyErrorMessage(errorCode);
+      setError(friendlyMessage);
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Password actions
+  // Save a password to Firestore
   const savePassword = async (
     name: string,
-    passwordValue: string, // Unused
-    encryptedPassword: string,
-    hashedPassword: string
-  ) => {
-    if (!db || !userId) return;
+    password: string
+  ): Promise<void> => {
+    if (!isLoggedIn || !userId || !userSecretKey) {
+      setError("Please sign in to save passwords.");
+      return;
+    }
     setLoading(true);
-    setError(null);
     try {
-      const collectionPath = `users/${userId}/passwords`;
-      await addDoc(collection(db, collectionPath), {
+      const encryptedPassword: string = await encryptPassword(
+        password,
+        userSecretKey
+      );
+      const docRef: DocumentReference<DocumentData> = doc(
+        collection(db, "vaults", userId, "passwords")
+      );
+      await setDoc(docRef, {
         name,
         encryptedPassword,
-        hashedPassword,
+        createdAt: new Date(),
       });
-    } catch (err: unknown) {
-      console.error(err);
-      setError("Failed to save password");
+      setError(null);
+    } catch (e: any) {
+      setError("Failed to save password. Please try again.");
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const deletePassword = async (id: string) => {
-    if (!db || !userId) return;
+  // Delete a password from Firestore
+  const deletePassword = async (id: string): Promise<void> => {
+    if (!isLoggedIn || !userId) {
+      setError("Please sign in to delete passwords.");
+      return;
+    }
     setLoading(true);
     try {
-      const docPath = `users/${userId}/passwords/${id}`;
-      await deleteDoc(doc(db, docPath));
-    } catch (err: unknown) {
-      console.error(err);
-      setError("Failed to delete password");
+      const docRef: DocumentReference<DocumentData> = doc(
+        db,
+        "vaults",
+        userId,
+        "passwords",
+        id
+      );
+      await deleteDoc(docRef);
+      setError(null);
+    } catch (e: any) {
+      setError("Failed to delete password. Please try again.");
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -199,4 +288,4 @@ export function usePasswordVault() {
     savePassword,
     deletePassword,
   };
-}
+};
