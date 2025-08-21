@@ -4,6 +4,7 @@ import { useState } from "react";
 import PasswordVault from "../components/PasswordVault";
 import PhishingAnalyzer from "../components/PhishingAnalyzer";
 import SecurityTips from "../components/SecurityTips";
+import DataBackupReminder from "../components/DataBackupReminder";
 
 // Define the view types to control which component is visible
 type ViewType = "analyzer" | "vault";
@@ -51,6 +52,9 @@ export default function Home() {
           {/* Conditionally render the selected view */}
           {activeView === "analyzer" && <PhishingAnalyzer />}
           {activeView === "vault" && <PasswordVault />}
+
+          {/* Always render the Data Backup Reminder */}
+          <DataBackupReminder />
         </div>
 
         {/* Security Tips Aside */}
