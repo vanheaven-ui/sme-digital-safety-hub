@@ -1,206 +1,63 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import PasswordVault from "../components/PasswordVault";
+import PhishingAnalyzer from "../components/PhishingAnalyzer";
+import SecurityTips from "../components/SecurityTips";
 
-interface AnalysisResult {
-  score: number;
-  reasoning: string;
-}
+// Define the view types to control which component is visible
+type ViewType = "analyzer" | "vault";
 
 export default function Home() {
-  const [inputText, setInputText] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
-    null
-  );
-  const [error, setError] = useState<string | null>(null);
-
-  // Create a ref for the result section
-  const resultRef = useRef<HTMLDivElement>(null);
-
-  const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setAnalysisResult(null);
-    setError(null);
-
-    if (inputText.trim() === "") {
-      setError("Please enter some text to analyze.");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/phishing-analyzer", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: inputText }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to analyze text.");
-      }
-
-      const data: AnalysisResult = await response.json();
-      setAnalysisResult(data);
-    } catch (err) {
-      console.error(err);
-      setError("An error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        if (resultRef.current) {
-          resultRef.current.scrollIntoView({
-            behavior: "smooth",
-            block: "center",
-          });
-        }
-      }, 100);
-    }
-  };
-
-  // Helper function to determine the color and emoji based on the score
-  const getScoreStyle = (score: number) => {
-    if (score >= 80) {
-      return {
-        color: "text-red-600",
-        bg: "bg-red-100",
-        emoji: "�",
-      };
-    } else if (score >= 40) {
-      return {
-        color: "text-yellow-600",
-        bg: "bg-yellow-100",
-        emoji: "⚠️",
-      };
-    } else {
-      return {
-        color: "text-green-600",
-        bg: "bg-green-100",
-        emoji: "✅",
-      };
-    }
-  };
-
-  const formatReasoning = (text: string) => {
-    let formattedText = text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    formattedText = formattedText.replace(/__(.*?)__/g, "<strong>$1</strong>");
-
-    formattedText = formattedText.replace(/\*(.*?)\*/g, "<em>$1</em>");
-    formattedText = formattedText.replace(/_(.*?)_/g, "<em>$1</em>");
-
-    const lines = formattedText.split("\n");
-    let html = "";
-    let inList = false;
-
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      const isListItem =
-        trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ");
-
-      if (isListItem) {
-        if (!inList) {
-          html += "<ul>";
-          inList = true;
-        }
-
-        const listItemText = trimmedLine.substring(2);
-        html += `<li>${listItemText}</li>`;
-      } else {
-        if (inList) {
-          html += "</ul>";
-          inList = false;
-        }
-        if (trimmedLine) {
-          html += `<p>${trimmedLine}</p>`;
-        }
-      }
-    });
-
-    if (inList) {
-      html += "</ul>";
-    }
-
-    return html;
-  };
-
-  const scoreStyle = analysisResult
-    ? getScoreStyle(analysisResult.score)
-    : null;
+  // State to manage the active view, defaulting to the analyzer
+  const [activeView, setActiveView] = useState<ViewType>("analyzer");
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-6 bg-gray-100">
-      <div className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg mb-8">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
-          SME Digital Safety Hub
-        </h1>
-        <p className="text-center text-gray-600 mb-8">
-          Analyze suspicious emails and messages to detect phishing attempts.
-        </p>
+    <div className="flex min-h-screen flex-col items-center p-6 bg-gray-100">
+      <div className="w-full max-w-5xl flex flex-col md:flex-row gap-8">
+        {/* Main Content Area */}
+        <div className="w-full md:w-2/3 bg-white p-8 rounded-lg shadow-lg mb-8 md:mb-0">
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
+            SME Digital Safety Hub
+          </h1>
+          <p className="text-center text-gray-600 mb-8">
+            Your centralized suite for digital security.
+          </p>
 
-        <form onSubmit={handleAnalyze} className="w-full">
-          <textarea
-            className="w-full p-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-            rows={6}
-            placeholder="Paste your suspicious text here..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-          ></textarea>
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400"
-            disabled={loading}
-          >
-            {loading ? "Analyzing..." : "Analyze Text"}
-          </button>
-        </form>
-
-        {error && (
-          <div className="mt-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md">
-            <p>{error}</p>
+          {/* Navigation buttons to switch views */}
+          <div className="flex justify-center gap-4 mb-8">
+            <button
+              onClick={() => setActiveView("analyzer")}
+              className={`px-6 py-2 rounded-full font-semibold transition-colors ${
+                activeView === "analyzer"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Phishing Analyzer
+            </button>
+            <button
+              onClick={() => setActiveView("vault")}
+              className={`px-6 py-2 rounded-full font-semibold transition-colors ${
+                activeView === "vault"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+            >
+              Password Vault
+            </button>
           </div>
-        )}
 
-        {analysisResult && (
-          <div
-            ref={resultRef}
-            className={`mt-6 p-6 rounded-md border ${
-              scoreStyle ? scoreStyle.bg : "bg-gray-50"
-            } ${
-              scoreStyle
-                ? "border-" + scoreStyle.bg.split("-")[1] + "-400"
-                : "border-gray-200"
-            }`}
-          >
-            <h2 className="text-2xl font-semibold mb-3 flex items-center">
-              Analysis Result
-              <span className="ml-2">{scoreStyle?.emoji}</span>
-            </h2>
-            <p className="text-gray-700 mb-2">
-              <strong>Suspicion Score:</strong>{" "}
-              <span
-                className={`font-bold ${scoreStyle ? scoreStyle.color : ""}`}
-              >
-                {analysisResult.score}/100
-              </span>
-            </p>
-            <p className="text-gray-700">
-              <strong>Reasoning:</strong>
-            </p>
-            <div
-              className="prose text-gray-600 mt-2"
-              dangerouslySetInnerHTML={{
-                __html: formatReasoning(analysisResult.reasoning),
-              }}
-            />
-          </div>
-        )}
+          {/* Conditionally render the selected view */}
+          {activeView === "analyzer" && <PhishingAnalyzer />}
+          {activeView === "vault" && <PasswordVault />}
+        </div>
+
+        {/* Security Tips Aside */}
+        <div className="w-full md:w-1/3 bg-white p-8 rounded-lg shadow-lg overflow-y-auto h-[80vh] sticky top-8">
+          <SecurityTips />
+        </div>
       </div>
-
-      <PasswordVault />
     </div>
   );
 }
