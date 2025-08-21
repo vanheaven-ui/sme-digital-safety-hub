@@ -38,7 +38,7 @@ interface PasswordEntry {
   hashedPassword: string;
 }
 
-export function usePasswordVault(appId: string) {
+export function usePasswordVault() {
   const [auth, setAuth] = useState<any>(null);
   const [db, setDb] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -76,10 +76,8 @@ export function usePasswordVault(appId: string) {
   useEffect(() => {
     if (!db || !userId) return;
 
-    const passwordsCollection = collection(
-      db,
-      `/artifacts/${appId}/users/${userId}/passwords`
-    );
+    // Corrected path to match Firestore security rules
+    const passwordsCollection = collection(db, `users/${userId}/passwords`);
     const q = query(passwordsCollection);
 
     const unsubscribe = onSnapshot(
@@ -104,7 +102,7 @@ export function usePasswordVault(appId: string) {
     );
 
     return () => unsubscribe();
-  }, [db, userId, appId]);
+  }, [db, userId]); // Dependency array ensures the listener re-runs when userId changes
 
   // Auth actions
   const signIn = async (email: string, password: string) => {
@@ -145,7 +143,7 @@ export function usePasswordVault(appId: string) {
   // Password actions
   const savePassword = async (
     name: string,
-    passwordValue: string,
+    passwordValue: string, // Unused but kept for consistency
     encryptedPassword: string,
     hashedPassword: string
   ) => {
@@ -153,7 +151,8 @@ export function usePasswordVault(appId: string) {
     setLoading(true);
     setError(null);
     try {
-      const collectionPath = `/artifacts/${appId}/users/${userId}/passwords`;
+      // Corrected path for saving a password
+      const collectionPath = `users/${userId}/passwords`;
       await addDoc(collection(db, collectionPath), {
         name,
         encryptedPassword,
@@ -171,7 +170,8 @@ export function usePasswordVault(appId: string) {
     if (!db || !userId) return;
     setLoading(true);
     try {
-      const docPath = `/artifacts/${appId}/users/${userId}/passwords/${id}`;
+      // Corrected path for deleting a password
+      const docPath = `users/${userId}/passwords/${id}`;
       await deleteDoc(doc(db, docPath));
     } catch (err) {
       console.error(err);
