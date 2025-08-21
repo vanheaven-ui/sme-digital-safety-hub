@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { initializeApp } from "firebase/app";
+import { initializeApp, FirebaseApp } from "firebase/app";
 import {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  Auth,
   User,
 } from "firebase/auth";
 import {
   getFirestore,
+  Firestore,
   collection,
   addDoc,
   deleteDoc,
@@ -31,7 +33,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
 };
 
-interface PasswordEntry {
+export interface PasswordEntry {
   id: string;
   name: string;
   encryptedPassword: string;
@@ -39,8 +41,8 @@ interface PasswordEntry {
 }
 
 export function usePasswordVault() {
-  const [auth, setAuth] = useState<any>(null);
-  const [db, setDb] = useState<any>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [db, setDb] = useState<Firestore | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -50,9 +52,9 @@ export function usePasswordVault() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const app = initializeApp(firebaseConfig);
+    const app: FirebaseApp = initializeApp(firebaseConfig);
     setDb(getFirestore(app));
-    const firebaseAuth = getAuth(app);
+    const firebaseAuth: Auth = getAuth(app);
     setAuth(firebaseAuth);
 
     const unsubscribe = onAuthStateChanged(
@@ -76,7 +78,6 @@ export function usePasswordVault() {
   useEffect(() => {
     if (!db || !userId) return;
 
-    // Corrected path to match Firestore security rules
     const passwordsCollection = collection(db, `users/${userId}/passwords`);
     const q = query(passwordsCollection);
 
@@ -85,7 +86,11 @@ export function usePasswordVault() {
       (snapshot) => {
         const fetchedEntries: PasswordEntry[] = [];
         snapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-          const data = doc.data();
+          const data = doc.data() as {
+            name?: string;
+            encryptedPassword?: string;
+            hashedPassword?: string;
+          };
           fetchedEntries.push({
             id: doc.id,
             name: data.name || "",
@@ -95,14 +100,14 @@ export function usePasswordVault() {
         });
         setEntries(fetchedEntries);
       },
-      (err) => {
+      (err: unknown) => {
         console.error(err);
         setError("Failed to load passwords.");
       }
     );
 
     return () => unsubscribe();
-  }, [db, userId]); // Dependency array ensures the listener re-runs when userId changes
+  }, [db, userId]);
 
   // Auth actions
   const signIn = async (email: string, password: string) => {
@@ -111,9 +116,10 @@ export function usePasswordVault() {
     try {
       if (!auth) throw new Error("Auth not initialized");
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (err instanceof Error) setError(err.message);
+      else setError("Sign in failed");
       console.error(err);
-      setError(err.message || "Sign in failed");
     } finally {
       setLoading(false);
     }
@@ -125,9 +131,10 @@ export function usePasswordVault() {
     try {
       if (!auth) throw new Error("Auth not initialized");
       await createUserWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (err instanceof Error) setError(err.message);
+      else setError("Sign up failed");
       console.error(err);
-      setError(err.message || "Sign up failed");
     } finally {
       setLoading(false);
     }
@@ -143,7 +150,7 @@ export function usePasswordVault() {
   // Password actions
   const savePassword = async (
     name: string,
-    passwordValue: string, // Unused but kept for consistency
+    passwordValue: string, // Unused
     encryptedPassword: string,
     hashedPassword: string
   ) => {
@@ -151,14 +158,13 @@ export function usePasswordVault() {
     setLoading(true);
     setError(null);
     try {
-      // Corrected path for saving a password
       const collectionPath = `users/${userId}/passwords`;
       await addDoc(collection(db, collectionPath), {
         name,
         encryptedPassword,
         hashedPassword,
       });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
       setError("Failed to save password");
     } finally {
@@ -170,10 +176,9 @@ export function usePasswordVault() {
     if (!db || !userId) return;
     setLoading(true);
     try {
-      // Corrected path for deleting a password
       const docPath = `users/${userId}/passwords/${id}`;
       await deleteDoc(doc(db, docPath));
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
       setError("Failed to delete password");
     } finally {

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 // Types for the Gemini API request
 interface ChatPart {
@@ -23,10 +23,11 @@ interface GeminiResponseCandidate {
 
 interface GeminiResponse {
   candidates?: GeminiResponseCandidate[];
-  [key: string]: any; // For any extra fields we don't care about
+  // Use unknown instead of any to satisfy @typescript-eslint/no-explicit-any
+  [key: string]: unknown;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const prompt =
       "Generate a list of 5 concise and actionable digital security tips for small business owners. Format the response as a simple markdown list.";
