@@ -11,8 +11,6 @@ if (!apiKey) {
   throw new Error("GEMINI_API_KEY is not defined in environment variables.");
 }
 
-const genAI = new GoogleGenerativeAI(apiKey);
-
 export async function POST(req: NextRequest) {
   try {
     const { text } = await req.json();
