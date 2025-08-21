@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 
 export default function DataBackupReminder() {
   const [showNotification, setShowNotification] = useState<boolean>(false);
-
   const [lastReminderDate, setLastReminderDate] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -37,19 +36,26 @@ export default function DataBackupReminder() {
       </h2>
       {showNotification ? (
         <div className="p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-md flex items-center justify-between transition-opacity duration-300">
-          <p className="font-semibold">It's time to back up your data! 💾</p>
+          <p className="font-semibold">
+            It&apos;s time to back up your data! 💾
+          </p>
           <button
             onClick={handleSetReminder}
             className="bg-yellow-600 text-white text-sm font-semibold py-2 px-4 rounded-full hover:bg-yellow-700 transition-colors"
           >
-            I've Backed Up
+            I&apos;ve Backed Up
           </button>
         </div>
       ) : (
         <div className="p-4 bg-gray-200 border border-gray-300 text-gray-600 rounded-md">
           <p className="text-center">
-            You're all set! Reminder for next backup will appear in a week.
+            You&apos;re all set! Reminder for next backup will appear in a week.
           </p>
+          {lastReminderDate && (
+            <p className="text-xs text-center text-gray-500 mt-2">
+              Last backup recorded on: {lastReminderDate.toLocaleDateString()}
+            </p>
+          )}
         </div>
       )}
     </div>

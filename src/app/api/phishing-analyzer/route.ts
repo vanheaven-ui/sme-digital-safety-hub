@@ -1,12 +1,7 @@
-// app/api/phishing-analyzer/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Best Practice: Use environment variables for sensitive data
 const apiKey = process.env.GEMINI_API_KEY;
 
-// Check if the API key is available
 if (!apiKey) {
   throw new Error("GEMINI_API_KEY is not defined in environment variables.");
 }
@@ -22,10 +17,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Correctly define the model name in a constant variable
     const MODEL_NAME = "gemini-2.5-flash";
 
-    // This is the core of our AI logic: the prompt.
     const prompt = `
       You are an expert cybersecurity analyst for a small business.
       Your task is to analyze the following text from an email or a message and determine if it is a phishing attempt or a scam.
@@ -44,9 +37,8 @@ export async function POST(req: NextRequest) {
       "${text}"
     `;
 
-    // --- Start of Retry and Caching Implementation ---
     const maxRetries = 3;
-    let delay = 1000; // 1 second initial delay
+    let delay = 1000; 
     let result = null;
 
     for (let i = 0; i < maxRetries; i++) {
@@ -73,8 +65,8 @@ export async function POST(req: NextRequest) {
         if (response.status === 429) {
           console.log(`Rate limit exceeded. Retrying in ${delay}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 2; // Exponential backoff
-          continue; // Go to the next loop iteration
+          delay *= 2; 
+          continue;
         }
 
         if (!response.ok) {
@@ -83,12 +75,12 @@ export async function POST(req: NextRequest) {
         }
 
         result = await response.json();
-        break; // Success! Exit the retry loop.
+        break;
       } catch (error) {
         console.error(`Attempt ${i + 1} failed:`, error);
         if (i < maxRetries - 1) {
           await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 2; // Exponential backoff
+          delay *= 2;
         } else {
           throw error;
         }
@@ -101,9 +93,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- End of Retry and Caching Implementation ---
-
-    // The AI response might contain the score and reasoning.
     const aiResponseText = result.candidates[0].content.parts[0].text;
     const scoreMatch = aiResponseText.match(/Suspicion Score: (\d+)/);
     const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
