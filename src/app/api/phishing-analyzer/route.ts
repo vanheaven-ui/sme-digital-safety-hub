@@ -25,8 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Correctly define the model name in a constant variable
-    const MODEL_NAME = "gemini-1.5-flash";
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const MODEL_NAME = "gemini-2.5-flash";
 
     // This is the core of our AI logic: the prompt.
     const prompt = `
