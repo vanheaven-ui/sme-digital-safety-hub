@@ -1,4 +1,3 @@
-// hooks/usePasswordVault.ts
 "use client";
 
 import { useState, useEffect } from "react";
@@ -23,14 +22,8 @@ import {
   DocumentData,
   CollectionReference,
   DocumentReference,
+  QuerySnapshot,
 } from "firebase/firestore";
-
-// Helper function to generate a random 32-byte key
-const generateKey = (): string => {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...Array.from(arr)));
-};
 
 // Map Firebase auth error codes to user-friendly messages
 const getFriendlyErrorMessage = (errorCode: string): string => {
@@ -51,7 +44,7 @@ const getFriendlyErrorMessage = (errorCode: string): string => {
   }
 };
 
-// Define Firebase configuration based on environment variables
+// Firebase configuration
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -62,7 +55,7 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase App outside the hook to avoid re-initialization on every render
+// Initialize Firebase App
 const app: FirebaseApp = initializeApp(firebaseConfig);
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
@@ -71,7 +64,7 @@ export interface PasswordEntry {
   id: string;
   name: string;
   encryptedPassword: string;
-  createdAt: any;
+  createdAt: Date;
 }
 
 interface UsePasswordVaultReturn {
@@ -97,11 +90,6 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
   const [userId, setUserId] = useState<string | null>(null);
   const [userSecretKey, setUserSecretKey] = useState<string | null>(null);
 
-  // Use a ref for the encryption key to persist across re-renders
-  // This is a simple mock, a real application would use a secure server-side method
-  // to handle encryption and decryption.
-  const encryptionKey = "my-secret-key-for-now";
-
   // Authenticate user with Firebase
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
@@ -119,8 +107,8 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [auth]);
+    return unsubscribe;
+  }, []);
 
   // Fetch passwords from Firestore
   useEffect(() => {
@@ -133,41 +121,33 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
       userId,
       "passwords"
     );
-    const unsubscribe = onSnapshot(userVaultRef, (snapshot) => {
-      const vaultEntries: PasswordEntry[] = snapshot.docs.map((doc) => {
-        const data = doc.data() as Omit<PasswordEntry, "id">;
-        return {
-          id: doc.id,
-          name: data.name,
-          encryptedPassword: data.encryptedPassword,
-          createdAt:
-            data.createdAt instanceof Date
-              ? data.createdAt
-              : new Date(data.createdAt),
-        };
-      });
-      setEntries(vaultEntries);
-      setLoading(false);
-    });
 
-    return () => unsubscribe();
+    const unsubscribe = onSnapshot(
+      userVaultRef,
+      (snapshot: QuerySnapshot<DocumentData>) => {
+        const vaultEntries: PasswordEntry[] = snapshot.docs.map((doc) => {
+          const data = doc.data() as Omit<PasswordEntry, "id">;
+          return {
+            id: doc.id,
+            name: data.name,
+            encryptedPassword: data.encryptedPassword,
+            createdAt:
+              data.createdAt instanceof Date
+                ? data.createdAt
+                : new Date(data.createdAt),
+          };
+        });
+        setEntries(vaultEntries);
+        setLoading(false);
+      }
+    );
+
+    return unsubscribe;
   }, [isLoggedIn, userId]);
 
-  // Encryption function mock
-  const encryptPassword = async (
-    password: string,
-    secretKey: string
-  ): Promise<string> => {
+  // Mock encryption (used in savePassword)
+  const encryptPassword = (password: string, secretKey: string): string => {
     return btoa(password + secretKey);
-  };
-
-  // Decryption function mock
-  const decryptPassword = async (
-    encryptedText: string,
-    secretKey: string
-  ): Promise<string> => {
-    const decoded = atob(encryptedText);
-    return decoded.replace(secretKey, "");
   };
 
   // Handle user sign-in
@@ -176,10 +156,9 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       setError(null);
-    } catch (e: any) {
-      const errorCode = e.code;
-      const friendlyMessage = getFriendlyErrorMessage(errorCode);
-      setError(friendlyMessage);
+    } catch (e: unknown) {
+      const errorCode = (e as { code?: string }).code || "";
+      setError(getFriendlyErrorMessage(errorCode));
       console.error(e);
     } finally {
       setLoading(false);
@@ -192,10 +171,9 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       setError(null);
-    } catch (e: any) {
-      const errorCode = e.code;
-      const friendlyMessage = getFriendlyErrorMessage(errorCode);
-      setError(friendlyMessage);
+    } catch (e: unknown) {
+      const errorCode = (e as { code?: string }).code || "";
+      setError(getFriendlyErrorMessage(errorCode));
       console.error(e);
     } finally {
       setLoading(false);
@@ -208,17 +186,16 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
     try {
       await signOut(auth);
       setError(null);
-    } catch (e: any) {
-      const errorCode = e.code;
-      const friendlyMessage = getFriendlyErrorMessage(errorCode);
-      setError(friendlyMessage);
+    } catch (e: unknown) {
+      const errorCode = (e as { code?: string }).code || "";
+      setError(getFriendlyErrorMessage(errorCode));
       console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  // Save a password to Firestore
+  // Save password
   const savePassword = async (
     name: string,
     password: string
@@ -229,10 +206,7 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
     }
     setLoading(true);
     try {
-      const encryptedPassword: string = await encryptPassword(
-        password,
-        userSecretKey
-      );
+      const encryptedPassword = encryptPassword(password, userSecretKey);
       const docRef: DocumentReference<DocumentData> = doc(
         collection(db, "vaults", userId, "passwords")
       );
@@ -242,7 +216,7 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
         createdAt: new Date(),
       });
       setError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError("Failed to save password. Please try again.");
       console.error(e);
     } finally {
@@ -250,7 +224,7 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
     }
   };
 
-  // Delete a password from Firestore
+  // Delete password
   const deletePassword = async (id: string): Promise<void> => {
     if (!isLoggedIn || !userId) {
       setError("Please sign in to delete passwords.");
@@ -267,7 +241,7 @@ export const usePasswordVault = (): UsePasswordVaultReturn => {
       );
       await deleteDoc(docRef);
       setError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError("Failed to delete password. Please try again.");
       console.error(e);
     } finally {
